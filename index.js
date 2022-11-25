@@ -24,15 +24,28 @@ async function run() {
     const database = client.db('buyNsale');
     const ProductCollection = database.collection('products');
     const CategoryCollection = database.collection('categories');
+    const UserCollection = database.collection('users');
+
+    app.get('/products-categories', async (_req, res) => {
+      const productsCategories = await CategoryCollection.find({}).toArray();
+      res.json(productsCategories);
+    });
 
     app.get('/products', async (_req, res) => {
       const products = await ProductCollection.find({}).toArray();
       res.json(products);
     });
 
-    app.get('/products-categories', async (_req, res) => {
-      const productsCategories = await CategoryCollection.find({}).toArray();
-      res.json(productsCategories);
+    app.get('/products/:categoryId', async (req, res) => {
+      const categoryId = req.params.categoryId;
+      const products = await ProductCollection.find({ categoryId }).toArray();
+      res.json(products);
+    });
+
+    app.post('/users', async (req, res) => {
+      const user = req.body;
+      const result = await UserCollection.insertOne(user);
+      res.json(result);
     });
   } finally {
   }
