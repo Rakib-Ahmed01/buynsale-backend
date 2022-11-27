@@ -2,9 +2,10 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const jwt = require('jsonwebtoken');
 
 const app = express();
-const port = process.env.PORT || 8000;
+const port = 8000;
 
 app.use(express.json());
 app.use(cors());
@@ -22,9 +23,18 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     const database = client.db('buyNsale');
-    const ProductCollection = database.collection('products');
-    const CategoryCollection = database.collection('categories');
     const UserCollection = database.collection('users');
+    const OrderCollection = database.collection('orders');
+    const ProductCollection = database.collection('products');
+    const WishlistCollection = database.collection('wishlists');
+    const CategoryCollection = database.collection('categories');
+    const ReportedProductCollection = database.collection('reportedProducts');
+
+    app.post('/jwt', (req, res) => {
+      const user = req.body;
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN);
+      res.json({ token });
+    });
 
     app.get('/products-categories', async (_req, res) => {
       const productsCategories = await CategoryCollection.find({}).toArray();
@@ -42,9 +52,67 @@ async function run() {
       res.json(products);
     });
 
-    app.post('/users', async (req, res) => {
+    app.put('/users', async (req, res) => {
       const user = req.body;
-      const result = await UserCollection.insertOne(user);
+      const email = req.query.email;
+      const result = await UserCollection.updateOne(
+        { email },
+        { $set: user },
+        { upsert: true }
+      );
+      res.json(result);
+    });
+
+    app.get('/user-status', async (req, res) => {
+      const email = req.query?.email;
+      const user = await UserCollection.findOne({ email });
+      let status;
+
+      if (user?.isAdmin) {
+        status = { role: 'admin' };
+      } else if (user?.isSeller) {
+        status = { role: 'seller' };
+      } else {
+        status = { role: 'buyer' };
+      }
+      res.json(status);
+    });
+
+    app.get('/orders', async (req, res) => {
+      const orders = await OrderCollection.find({}).toArray();
+      res.json(orders);
+    });
+
+    app.put('/orders', async (req, res) => {
+      const order = req.body;
+      const email = order?.buyerEmail;
+      const id = order?.productId;
+      const filter = { buyerEmail: email, productId: id };
+      const options = { upsert: true };
+      const result = await OrderCollection.updateOne(
+        filter,
+        { $set: order },
+        options
+      );
+      res.json(result);
+    });
+
+    app.get('/wishlists', async (req, res) => {
+      const orders = await OrderCollection.find({}).toArray();
+      res.json(orders);
+    });
+
+    app.put('/wishlists', async (req, res) => {
+      const wishlist = req.body;
+      const email = wishlist?.buyerEmail;
+      const id = wishlist?.productId;
+      const filter = { buyerEmail: email, productId: id };
+      const options = { upsert: true };
+      const result = await WishlistCollection.updateOne(
+        filter,
+        { $set: wishlist },
+        options
+      );
       res.json(result);
     });
   } finally {
@@ -55,6 +123,21 @@ run().catch((err) => console.log(err));
 app.get('/', (_req, res) => {
   res.json({ message: 'Home Page' });
 });
+
+function verifyToken(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    return res.status(401).json({ message: 'Unauthorized Access!' });
+  }
+  const token = authHeader.split(' ')[1];
+  jwt.verify(token, process.env.ACCESS_TOKEN, (err, payload) => {
+    if (err) {
+      return res.status(401).json({ message: 'Unauthorized Access!' });
+    }
+    req.payload = payload;
+    next();
+  });
+}
 
 app.listen(port, () => {
   console.log('server is listening on port', +port);
