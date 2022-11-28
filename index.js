@@ -42,13 +42,71 @@ async function run() {
     });
 
     app.get('/products', async (_req, res) => {
-      const products = await ProductCollection.find({}).toArray();
+      const products = await ProductCollection.find({})
+        .sort({ _id: -1 })
+        .toArray();
       res.json(products);
     });
 
     app.get('/products/:categoryId', async (req, res) => {
       const categoryId = req.params.categoryId;
       const products = await ProductCollection.find({ categoryId }).toArray();
+      res.json(products);
+    });
+
+    app.post('/products', async (req, res) => {
+      let product = req.body;
+      const categories = await CategoryCollection.find({}).toArray();
+      let result;
+
+      let categoryExists = categories.filter(
+        (category) =>
+          category.categoryName.toUpperCase() ===
+          product.categoryName.toUpperCase()
+      );
+
+      if (categoryExists.length) {
+        const category = categoryExists[0];
+        const categoryId = category._id.toString();
+        delete category._id;
+        delete category.image;
+        product = { ...product, ...category, categoryId };
+        result = await ProductCollection.insertOne(product);
+        return res.json(result);
+      } else {
+        const categoryName =
+          product?.categoryName?.charAt(0)?.toUpperCase() +
+          product.categoryName?.slice(1);
+        const category = {
+          categoryName,
+          image: product.image,
+        };
+        const categoriesRes = await CategoryCollection.insertOne(category);
+        const productRes = {
+          ...product,
+          categoryId: categoriesRes.insertedId.toString(),
+        };
+        result = await ProductCollection.insertOne(productRes);
+        return res.json(result);
+      }
+    });
+
+    app.patch('/products', async (req, res) => {
+      const { productId } = req.body;
+      const result = await ProductCollection.updateOne(
+        { _id: ObjectId(productId) },
+        { $set: { isAdvertised: true } }
+      );
+      res.json(result);
+    });
+
+    app.get('/my-products', async (req, res) => {
+      const email = req.query.email;
+      const products = await ProductCollection.find({
+        sellerEmail: email,
+      })
+        .sort({ _id: -1 })
+        .toArray();
       res.json(products);
     });
 
@@ -75,11 +133,19 @@ async function run() {
       } else {
         status = { role: 'buyer' };
       }
-      res.json(status);
+      res.json({
+        ...status,
+        isSeller: user.isSeller,
+        isVerified: user.isVerified,
+        name: user.name,
+      });
     });
 
     app.get('/orders', async (req, res) => {
-      const orders = await OrderCollection.find({}).toArray();
+      const email = req.query?.email;
+      const orders = await OrderCollection.find({
+        buyerEmail: email,
+      }).toArray();
       res.json(orders);
     });
 
@@ -94,12 +160,17 @@ async function run() {
         { $set: order },
         options
       );
+      await WishlistCollection.deleteOne({ productId: id });
+      console.log(order);
       res.json(result);
     });
 
     app.get('/wishlists', async (req, res) => {
-      const orders = await OrderCollection.find({}).toArray();
-      res.json(orders);
+      const email = req.query?.email;
+      const wishlists = await WishlistCollection.find({
+        buyerEmail: email,
+      }).toArray();
+      res.json(wishlists);
     });
 
     app.put('/wishlists', async (req, res) => {
