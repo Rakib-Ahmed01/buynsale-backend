@@ -112,13 +112,23 @@ async function run() {
 
     app.get('/sellers', async (req, res) => {
       const email = req.query?.email;
-      const sellers = await UserCollection.find({ isSeller: true }).toArray();
+      const sellers = await UserCollection.find({
+        isSeller: true,
+        email: { $ne: email },
+        isDeleted: false,
+      }).toArray();
       res.json(sellers);
     });
 
     app.get('/buyers', async (req, res) => {
-      const sellers = await UserCollection.find({ isSeller: false }).toArray();
-      res.json(sellers);
+      const email = req.query?.email;
+      console.log(email);
+      const buyers = await UserCollection.find({
+        isSeller: false,
+        email: { $ne: email },
+        isDeleted: false,
+      }).toArray();
+      res.json(buyers);
     });
 
     app.put('/users', async (req, res) => {
@@ -139,6 +149,10 @@ async function run() {
         { email },
         { $set: { isVerified: true } }
       );
+      await ProductCollection.updateMany(
+        { sellerEmail: email },
+        { $set: { sellerVerified: true } }
+      );
       res.json(result);
     });
 
@@ -148,6 +162,10 @@ async function run() {
         { email },
         { $set: { isVerified: false } }
       );
+      await ProductCollection.updateMany(
+        { sellerEmail: email },
+        { $set: { sellerVerified: false } }
+      );
       res.json(result);
     });
 
@@ -155,7 +173,7 @@ async function run() {
       const email = req.query.email;
       const result = await UserCollection.updateOne(
         { email },
-        { $set: { isDeleted: false } }
+        { $set: { isDeleted: true } }
       );
       res.json(result);
     });
