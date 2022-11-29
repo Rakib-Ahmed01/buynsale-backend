@@ -110,6 +110,17 @@ async function run() {
       res.json(products);
     });
 
+    app.get('/sellers', async (req, res) => {
+      const email = req.query?.email;
+      const sellers = await UserCollection.find({ isSeller: true }).toArray();
+      res.json(sellers);
+    });
+
+    app.get('/buyers', async (req, res) => {
+      const sellers = await UserCollection.find({ isSeller: false }).toArray();
+      res.json(sellers);
+    });
+
     app.put('/users', async (req, res) => {
       const user = req.body;
       const email = req.query.email;
@@ -117,6 +128,34 @@ async function run() {
         { email },
         { $set: user },
         { upsert: true }
+      );
+      console.log(user);
+      res.json(result);
+    });
+
+    app.put('/verify', async (req, res) => {
+      const email = req.query.email;
+      const result = await UserCollection.updateOne(
+        { email },
+        { $set: { isVerified: true } }
+      );
+      res.json(result);
+    });
+
+    app.put('/unverify', async (req, res) => {
+      const email = req.query.email;
+      const result = await UserCollection.updateOne(
+        { email },
+        { $set: { isVerified: false } }
+      );
+      res.json(result);
+    });
+
+    app.put('/delete', async (req, res) => {
+      const email = req.query.email;
+      const result = await UserCollection.updateOne(
+        { email },
+        { $set: { isDeleted: false } }
       );
       res.json(result);
     });
@@ -182,6 +221,26 @@ async function run() {
       const result = await WishlistCollection.updateOne(
         filter,
         { $set: wishlist },
+        options
+      );
+      res.json(result);
+    });
+
+    app.get('/reported-products', async (_req, res) => {
+      const products = await ReportedProductCollection.find({})
+        .sort({ _id: -1 })
+        .toArray();
+      res.json(products);
+    });
+
+    app.put('/reported-products', async (req, res) => {
+      const product = req.body;
+      const id = product?.productId;
+      const filter = { productId: id };
+      const options = { upsert: true };
+      const result = await ReportedProductCollection.updateOne(
+        filter,
+        { $set: { ...product, productId: id } },
         options
       );
       res.json(result);
