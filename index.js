@@ -41,6 +41,30 @@ async function run() {
     //   res.json(result);
     // });
 
+    function verifyToken(req, res, next) {
+      const authHeader = req.headers.authorization;
+      if (!authHeader) {
+        return res.status(401).json({ message: 'Unauthorized Access!' });
+      }
+      const token = authHeader.split(' ')[1];
+      jwt.verify(token, process.env.ACCESS_TOKEN, (err, payload) => {
+        if (err) {
+          return res.status(401).json({ message: 'Unauthorized Access!' });
+        }
+        req.payload = payload;
+        next();
+      });
+    }
+
+    async function verifyAdmin(req, res, next) {
+      const payload = req?.payload;
+      const user = await UserCollection.findOne({ email: payload?.email });
+      if (!user?.isAdmin) {
+        return res.status(401).json({ message: 'Unauthorized Access!' });
+      }
+      next();
+    }
+
     app.post('/jwt', (req, res) => {
       const user = req.body;
       const token = jwt.sign(user, process.env.ACCESS_TOKEN);
@@ -122,8 +146,14 @@ async function run() {
       res.json(result);
     });
 
-    app.get('/my-products', async (req, res) => {
+    app.get('/my-products', verifyToken, async (req, res) => {
       const email = req.query.email;
+      const payload = req?.payload;
+      if (email !== payload?.email) {
+        return res
+          .status(403)
+          .json({ success: false, message: 'Forbidden Access!' });
+      }
       const products = await ProductCollection.find({
         sellerEmail: email,
       })
@@ -132,8 +162,14 @@ async function run() {
       res.json(products);
     });
 
-    app.get('/sellers', async (req, res) => {
+    app.get('/sellers', verifyToken, verifyAdmin, async (req, res) => {
       const email = req.query?.email;
+      const payload = req?.payload;
+      if (email !== payload?.email) {
+        return res
+          .status(403)
+          .json({ success: false, message: 'Forbidden Access!' });
+      }
       const sellers = await UserCollection.find({
         isSeller: true,
         email: { $ne: email },
@@ -142,11 +178,15 @@ async function run() {
       res.json(sellers);
     });
 
-    app.get('/buyers', async (req, res) => {
+    app.get('/users', verifyToken, verifyAdmin, async (req, res) => {
       const email = req.query?.email;
-      console.log(email);
+      const payload = req?.payload;
+      if (email !== payload?.email) {
+        return res
+          .status(403)
+          .json({ success: false, message: 'Forbidden Access!' });
+      }
       const buyers = await UserCollection.find({
-        isSeller: false,
         email: { $ne: email },
         isDeleted: false,
       }).toArray();
@@ -161,7 +201,15 @@ async function run() {
         { $set: user },
         { upsert: true }
       );
-      console.log(user);
+      res.json(result);
+    });
+
+    app.put('/admin', async (req, res) => {
+      const email = req.query.email;
+      const result = await UserCollection.updateOne(
+        { email },
+        { $set: { isAdmin: true } }
+      );
       res.json(result);
     });
 
@@ -220,8 +268,14 @@ async function run() {
       });
     });
 
-    app.get('/orders', async (req, res) => {
+    app.get('/orders', verifyToken, async (req, res) => {
       const email = req.query?.email;
+      const payload = req?.payload;
+      if (email !== payload?.email) {
+        return res
+          .status(403)
+          .json({ success: false, message: 'Forbidden Access!' });
+      }
       const orders = await OrderCollection.find({
         buyerEmail: email,
       }).toArray();
@@ -240,12 +294,17 @@ async function run() {
         options
       );
       await WishlistCollection.deleteOne({ productId: id });
-      console.log(order);
       res.json(result);
     });
 
-    app.get('/wishlists', async (req, res) => {
+    app.get('/wishlists', verifyToken, async (req, res) => {
       const email = req.query?.email;
+      const payload = req?.payload;
+      if (email !== payload?.email) {
+        return res
+          .status(403)
+          .json({ success: false, message: 'Forbidden Access!' });
+      }
       const wishlists = await WishlistCollection.find({
         buyerEmail: email,
       }).toArray();
@@ -266,12 +325,24 @@ async function run() {
       res.json(result);
     });
 
-    app.get('/reported-products', async (_req, res) => {
-      const products = await ReportedProductCollection.find({})
-        .sort({ _id: -1 })
-        .toArray();
-      res.json(products);
-    });
+    app.get(
+      '/reported-products',
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const email = req.query?.email;
+        const payload = req?.payload;
+        if (email !== payload?.email) {
+          return res
+            .status(403)
+            .json({ success: false, message: 'Forbidden Access!' });
+        }
+        const products = await ReportedProductCollection.find({})
+          .sort({ _id: -1 })
+          .toArray();
+        res.json(products);
+      }
+    );
 
     app.put('/reported-products', async (req, res) => {
       const product = req.body;
@@ -293,21 +364,6 @@ run().catch((err) => console.log(err));
 app.get('/', (_req, res) => {
   res.json({ message: 'Home Page' });
 });
-
-function verifyToken(req, res, next) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) {
-    return res.status(401).json({ message: 'Unauthorized Access!' });
-  }
-  const token = authHeader.split(' ')[1];
-  jwt.verify(token, process.env.ACCESS_TOKEN, (err, payload) => {
-    if (err) {
-      return res.status(401).json({ message: 'Unauthorized Access!' });
-    }
-    req.payload = payload;
-    next();
-  });
-}
 
 app.listen(port, () => {
   console.log('server is listening on port', +port);
