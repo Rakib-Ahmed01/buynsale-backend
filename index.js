@@ -10,9 +10,11 @@ const port = 8000;
 app.use(express.json());
 app.use(cors());
 
-// const uri = `mongodb+srv://${process.env.DB_USERNAME}:${process.env.DB_PASS}@cluster0.ht2ef7a.mongodb.net/?retryWrites=true&w=majority`;
+const uri = `mongodb+srv://${process.env.DB_USERNAME}:${process.env.DB_PASS}@cluster0.ht2ef7a.mongodb.net/?retryWrites=true&w=majority`;
 
-const uri = process.env.DB_URI;
+// const uri = process.env.DB_URI;
+
+// console.log(uri);
 
 const client = new MongoClient(uri, {
   useNewUrlParser: true,
@@ -30,6 +32,15 @@ async function run() {
     const CategoryCollection = database.collection('categories');
     const ReportedProductCollection = database.collection('reportedProducts');
 
+    // app.get('/delete', async (_req, res) => {
+    //   const result = await ProductCollection.updateMany(
+    //     {},
+    //     { $set: { isDeleted: false } }
+    //   );
+    //   console.log(result);
+    //   res.json(result);
+    // });
+
     app.post('/jwt', (req, res) => {
       const user = req.body;
       const token = jwt.sign(user, process.env.ACCESS_TOKEN);
@@ -42,7 +53,9 @@ async function run() {
     });
 
     app.get('/products', async (_req, res) => {
-      const products = await ProductCollection.find({})
+      const products = await ProductCollection.find({
+        isDeleted: { $ne: true },
+      })
         .sort({ _id: -1 })
         .toArray();
       res.json(products);
@@ -89,6 +102,15 @@ async function run() {
         result = await ProductCollection.insertOne(productRes);
         return res.json(result);
       }
+    });
+
+    app.put('/products/:id', async (req, res) => {
+      const productId = req.params.id;
+      const result = await ProductCollection.updateOne(
+        { _id: ObjectId(productId) },
+        { $set: { isDeleted: true } }
+      );
+      res.json(result);
     });
 
     app.patch('/products', async (req, res) => {
